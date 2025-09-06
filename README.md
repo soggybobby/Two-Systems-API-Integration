@@ -1,6 +1,3 @@
-# Two-Systems-API-Integration
-# School Project
-
 # Requirements:
 Inventory System: PHP or Laravel
 Sales System: Python or DJANGO
