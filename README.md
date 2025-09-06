@@ -1,7 +1,7 @@
 # Requirements:
-Inventory System: PHP or Laravel
+Inventory System: Node.js
 
-Sales System: Python or DJANGO
+Sales System: Python
 
 Rest and Websocket API only
 
