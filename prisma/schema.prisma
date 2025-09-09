@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  sku         String   @unique
+  name        String
+  description String?
+  unit        String   // pcs, box, kg
+  listPrice   Decimal? @db.Decimal(10,2)
+  status      String   @default("ACTIVE")
+  currentQty  Int?     // optional cache for fast reads
+  updatedAt   DateTime @updatedAt
+
+  ledger InventoryLedger[]
+}
+
+model InventoryLedger {
+  id         Int      @id @default(autoincrement())
+  sku        String
+  product    Product  @relation(fields: [sku], references: [sku])
+  txnType    String   // SALE, PUR, ADJ+, ADJ-, RTN_IN, RTN_OUT, XFER_IN, XFER_OUT
+  qtyChange  Int
+  refType    String?  // SALE, PO, ADJ
+  refId      String?  // foreign reference id
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([sku, createdAt])
+  // Optional idempotency for external events
+  // @@unique([refType, refId, sku])
+}
