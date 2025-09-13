@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Customer, Sale
+from .models import Customer, Sale, Product
 from .serializers import CustomerSerializer, SaleSerializer
 
 # Temporary in-memory catalog (replace with Inventory later)
@@ -43,3 +43,12 @@ def checkout(request):
     ser.is_valid(raise_exception=True)
     sale = ser.save()
     return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)
+
+@api_view(["GET"])
+def product_list(request):
+    products = Product.objects.filter(is_active=True).order_by("name")
+    data = [
+        {"sku": p.sku, "name": p.name, "unit": p.unit, "price": float(p.price)}
+        for p in products
+    ]
+    return Response(data)

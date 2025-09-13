@@ -1,0 +1,8 @@
+{% extends "sales/base.html" %}
+{% block content %}
+<h2>Order placed!</h2>
+<p>Sale No: <b>{{ sale.sale_no }}</b></p>
+<p>Status: {{ sale.status }}</p>
+<p>Total: <b>₱{{ sale.total_amount|floatformat:2 }}</b></p>
+<p><a class="btn" href="{% url 'shop_home' %}">Back to shop</a></p>
+{% endblock %}

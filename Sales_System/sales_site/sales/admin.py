@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Customer, Sale, SaleItem
+from .models import Customer, Sale, SaleItem, Product
 
 class SaleItemInline(admin.TabularInline):
     model = SaleItem
@@ -12,3 +12,9 @@ class SaleAdmin(admin.ModelAdmin):
     inlines = [SaleItemInline]
 
 admin.site.register(Customer)
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ("sku", "name", "unit", "price", "is_active", "updated_at")
+    list_filter = ("is_active",)
+    search_fields = ("sku", "name")

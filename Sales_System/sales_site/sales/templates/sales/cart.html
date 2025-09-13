@@ -1,0 +1,51 @@
+{% extends "sales/base.html" %}
+{% block content %}
+<h2>Your Cart</h2>
+{% if items %}
+<form method="post" action="{% url 'update_cart' %}">
+  {% csrf_token %}
+  <table>
+    <tr>
+      <th>SKU</th>
+      <th>Product</th>
+      <th class="right">Price</th>
+      <th class="right">Qty</th>
+      <th class="right">Line total</th>
+      <th>Actions</th>
+    </tr>
+    {% for it in items %}
+      <tr>
+        <td>{{ it.sku }}</td>
+        <td>{{ it.name }}</td>
+        <td class="right">₱{{ it.price|floatformat:2 }}</td>
+        <td class="right">
+          <input type="number" name="qty_{{ it.sku }}" value="{{ it.qty }}" min="0" style="width:70px">
+        </td>
+        <td class="right">₱{{ it.line_total|floatformat:2 }}</td>
+        <td>
+          <!-- This button posts THIS form to the remove URL -->
+          <button class="btn" type="submit"
+                  formaction="{% url 'remove_from_cart' %}"
+                  formmethod="post"
+                  name="sku" value="{{ it.sku }}">
+            Remove
+          </button>
+        </td>
+      </tr>
+    {% endfor %}
+    <tr>
+      <td colspan="4" class="right"><b>Total</b></td>
+      <td class="right"><b>₱{{ total|floatformat:2 }}</b></td>
+      <td></td>
+    </tr>
+  </table>
+  <p>
+    <button class="btn" type="submit">Update cart</button>
+    <a class="btn" href="{% url 'checkout_form' %}">Proceed to checkout</a>
+  </p>
+</form>
+
+{% else %}
+<p>Your cart is empty.</p>
+{% endif %}
+{% endblock %}

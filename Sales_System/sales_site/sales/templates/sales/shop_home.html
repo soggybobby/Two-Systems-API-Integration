@@ -1,0 +1,63 @@
+{% extends "sales/base.html" %}
+{% block content %}
+<h2>Products</h2>
+
+<div class="products">
+  {% for p in products %}
+    <div class="product-card">
+      <h3>{{ p.name }}</h3>
+      <p><b>SKU:</b> {{ p.sku }}</p>
+      <p><b>Unit:</b> {{ p.unit }}</p>
+      <p>
+        {% if p.stock_qty > 0 %}
+          <span class="in-stock">In stock: {{ p.stock_qty }}</span>
+        {% else %}
+          <span class="out-stock">Out of stock</span>
+        {% endif %}
+      </p>
+      <p><b>₱{{ p.price|floatformat:2 }}</b></p>
+
+      <form method="post" action="{% url 'add_to_cart' %}">
+        {% csrf_token %}
+        <input type="hidden" name="sku" value="{{ p.sku }}">
+        <input type="number" name="qty" value="1" min="1" style="width:70px"
+               {% if p.stock_qty <= 0 %}disabled{% endif %}>
+        <button type="submit" class="btn"
+                {% if p.stock_qty <= 0 %}disabled{% endif %}>
+          {% if p.stock_qty > 0 %}Add to cart{% else %}Unavailable{% endif %}
+        </button>
+      </form>
+    </div>
+  {% empty %}
+    <p>No products available.</p>
+  {% endfor %}
+</div>
+
+<style>
+.products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.product-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  width: 220px;
+  background: #fafafa;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.in-stock {
+  color: green;
+  font-weight: bold;
+}
+.out-stock {
+  color: red;
+  font-weight: bold;
+}
+.btn[disabled] {
+  background: #ccc;
+  cursor: not-allowed;
+}
+</style>
+{% endblock %}

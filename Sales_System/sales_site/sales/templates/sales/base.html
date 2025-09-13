@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Simple Shop</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+    .btn { display:inline-block; padding:8px 12px; border:1px solid #ddd; border-radius:8px; text-decoration:none; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap:12px; }
+    .card { border:1px solid #eee; border-radius:12px; padding:12px; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { border-bottom:1px solid #eee; padding:8px; text-align:left; }
+    .right { text-align:right; }
+    .flash { padding:8px 12px; background:#eef; border:1px solid #ccd; border-radius:8px; margin:10px 0; }
+    form.inline { display:inline-block; }
+  </style>
+</head>
+<body>
+<header>
+  <div><a class="btn" href="{% url 'shop_home' %}">🏠 Home</a></div>
+  <nav>
+    <a class="btn" href="{% url 'view_cart' %}">🛒 Cart</a>
+    <a class="btn" href="/admin/">Admin</a>
+  </nav>
+</header>
+
+{% if messages %}
+  {% for m in messages %}
+    <div class="flash">{{ m }}</div>
+  {% endfor %}
+{% endif %}
+
+{% block content %}{% endblock %}
+</body>
+</html>
