@@ -16,8 +16,13 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.shortcuts import redirect
+
+def redirect_to_shop(request):
+    return redirect('shop_home')
 
 urlpatterns = [
+    path('', redirect_to_shop, name='index'),  # Add this line
     path("admin/", admin.site.urls),
     path("api/", include("sales.urls")),
 ]
