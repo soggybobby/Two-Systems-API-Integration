@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Customer, Sale, SaleItem
+from .models import Customer, Sale, SaleItem, Product
 
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
@@ -26,3 +26,18 @@ class SaleSerializer(serializers.ModelSerializer):
             SaleItem.objects.create(sale=sale, **item)
         sale.save()  # recompute total
         return sale
+    
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "sku",
+            "name",
+            "unit",
+            "price",
+            "stock_qty",
+            "is_active",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at"]

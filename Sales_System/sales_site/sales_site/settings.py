@@ -81,3 +81,7 @@ TIME_ZONE = "Asia/Manila"
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+# --- External service: Inventory_System ---
+INVENTORY_API_BASE = os.getenv("INVENTORY_API_BASE", "http://127.0.0.1:3001")
+INVENTORY_API_KEY  = os.getenv("INVENTORY_API_KEY", "")

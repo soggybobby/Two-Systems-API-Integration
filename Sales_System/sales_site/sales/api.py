@@ -1,5 +1,6 @@
-from rest_framework import serializers, viewsets
+from rest_framework import serializers, viewsets, filters
 from .models import Product, Sale, SaleItem, Customer
+from .serializers import ProductSerializer
 
 # --- SERIALIZERS ---
 class ProductSerializer(serializers.ModelSerializer):
@@ -28,8 +29,11 @@ class SaleSerializer(serializers.ModelSerializer):
 
 # --- VIEWSETS ---
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.all()
+    queryset = Product.objects.all().order_by("-updated_at")
     serializer_class = ProductSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["sku", "name"]
+    ordering_fields = ["updated_at", "price", "sku"]
 
 class SaleViewSet(viewsets.ModelViewSet):
     queryset = Sale.objects.all()

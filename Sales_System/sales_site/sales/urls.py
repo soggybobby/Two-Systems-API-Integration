@@ -1,49 +1,57 @@
+# sales/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+
 from sales.views import (
     CustomerViewSet,
     SaleViewSet,
-    product_list,
-    checkout,
+    product_list,   # JSON product list (legacy/plain)
+    checkout,       # JSON checkout (legacy/plain)
 )
 from sales.store_views import (
-    shop_home,
-    add_to_cart,
-    view_cart,
-    update_cart,
-    checkout_form,
-    place_order,
-    remove_from_cart,
+    shop_home,          # HTML
+    add_to_cart,        # HTML
+    view_cart,          # HTML
+    update_cart,        # HTML
+    checkout_form,      # HTML
+    place_order,        # HTML
+    remove_from_cart,   # HTML
 )
-from sales.api import ProductViewSet  # make sure this exists
+from sales.api import ProductViewSet
+from .views_inventory_sync import pull_from_inventory, push_to_inventory  # correct names
 
-# --- REST API router ---
 router = DefaultRouter()
 router.register(r"customers", CustomerViewSet)
-router.register(r"sales", SaleViewSet)
-router.register(r"products", ProductViewSet)
+router.register(r"sales",     SaleViewSet)
+router.register(r"products",  ProductViewSet)
 
 urlpatterns = [
-    # --- Admin site ---
+    # Admin
+    # If admin is already in sales_site/sales_site/urls.py, comment this to avoid duplicate namespace warnings.
     path("admin/", admin.site.urls),
 
-    # --- Home redirect (optional simple fix for /) ---
-    path("", shop_home, name="home"),  # now http://127.0.0.1:5000/ will show shop_home
+    # Home
+    path("", shop_home, name="home"),
+    path("shop/", shop_home, name="shop_home"),
 
-    # --- Storefront (HTML) routes ---
-    path("", shop_home, name="shop_home"),
-    path("cart/", view_cart, name="view_cart"),
-    path("cart/update/", update_cart, name="update_cart"),
-    path("cart/remove/", remove_from_cart, name="remove_from_cart"),
-    path("add/", add_to_cart, name="add_to_cart"),
-    path("checkout/", checkout_form, name="checkout_form"),
-    path("place-order/", place_order, name="place_order"),
+    # Storefront (HTML)
+    path("cart/",           view_cart,        name="view_cart"),
+    path("cart/update/",    update_cart,      name="update_cart"),
+    path("cart/remove/",    remove_from_cart, name="remove_from_cart"),
+    path("add/",            add_to_cart,      name="add_to_cart"),
+    path("checkout/",       checkout_form,    name="checkout_form"),
+    path("place-order/",    place_order,      name="place_order"),
 
-    # --- Legacy endpoints ---
-    path("products/", product_list),
-    path("checkout/", checkout),
+    # JSON endpoints (legacy/plain)
+    path("products/",        product_list, name="product_list_json"),
+    path("shop/products/",   product_list, name="product_list_json_shop"),  # for your Node caller
+    path("checkout-json/",   checkout,     name="checkout_json"),
 
-    # --- REST API routes ---
-    path("api/", include(router.urls)),  # /api/products/, /api/sales/, /api/customers/
+    # REST API
+    path("api/", include(router.urls)),
+
+    # Inventory ↔ Sales sync
+    path("api/sync-from-inventory/", pull_from_inventory, name="sync_from_inventory"),  # GET
+    path("api/sync-to-inventory/",   push_to_inventory,  name="sync_to_inventory"),    # POST
 ]
