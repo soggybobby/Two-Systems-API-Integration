@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@prisma/client": "^6.15.0",
+    "@types/cors": "^2.8.19",
     "axios": "^1.12.2",
+    "cors": "^2.8.5",
     "express": "^5.1.0",
     "prisma": "^6.15.0",
     "zod": "^4.1.5"
