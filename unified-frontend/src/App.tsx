@@ -2,16 +2,15 @@
 import { useState } from "react";
 import "./App.css";
 
-import {
-  getInventoryProducts,
-  syncSalesToInventory,
-} from "./services/inventoryApi";
+// runtime functions (normal import)
+import { getInventoryProducts } from "./services/inventoryApi";
 import {
   getSalesProducts,
   syncInventoryToSales,
+  syncSalesToInventory,
 } from "./services/salesApi";
 
-// Use `import type` so TS knows these are types only
+// types (type-only import so TS is happy)
 import type { InventoryProduct } from "./services/inventoryApi";
 import type { SalesProduct } from "./services/salesApi";
 
@@ -21,7 +20,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [log, setLog] = useState("");
 
-  // helper: pick a price from either price or listPrice
+  // pick from price or listPrice
   const getPrice = (p: { price?: number; listPrice?: number }) =>
     p.price ?? p.listPrice ?? 0;
 
@@ -80,24 +79,16 @@ function App() {
     setLoading(false);
   };
 
-    return (
+  return (
     <div className="app-root">
       <header className="app-header">
         <h1>Two-Systems Integration Dashboard</h1>
 
         <div className="button-row">
-          <button
-            className="btn"
-            onClick={loadInventory}
-            disabled={loading}
-          >
+          <button className="btn" onClick={loadInventory} disabled={loading}>
             Load Inventory products (Node)
           </button>
-          <button
-            className="btn"
-            onClick={loadSales}
-            disabled={loading}
-          >
+          <button className="btn" onClick={loadSales} disabled={loading}>
             Load Sales products (Django)
           </button>
           <button
@@ -121,97 +112,90 @@ function App() {
         </div>
       </header>
 
-      {/* main centered layout */}
+      {/* main two-column layout */}
       <main className="app-main">
-        <div className="tables-row">
-          {/* LEFT: Inventory */}
-          <section className="panel">
-            <div className="panel-header">
-              <h2>Inventory products (Node @ :3001)</h2>
-              <span className="panel-count">
-                {inventory.length} items
-              </span>
-            </div>
+        {/* LEFT: Inventory */}
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Inventory products (Node @ :3001)</h2>
+            <span className="panel-count">{inventory.length} items</span>
+          </div>
 
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>SKU</th>
-                    <th>Name</th>
-                    <th>Unit</th>
-                    <th className="num">Price</th>
-                    <th className="num">Qty</th>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Name</th>
+                  <th>Unit</th>
+                  <th className="num">Price</th>
+                  <th className="num">Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventory.map((p) => (
+                  <tr key={p.sku}>
+                    <td>{p.sku}</td>
+                    <td>{p.name}</td>
+                    <td>{p.unit}</td>
+                    <td className="num">{getPrice(p)}</td>
+                    <td className="num">{p.currentQty ?? 0}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {inventory.map((p) => (
-                    <tr key={p.sku}>
-                      <td>{p.sku}</td>
-                      <td>{p.name}</td>
-                      <td>{p.unit}</td>
-                      <td className="num">{getPrice(p)}</td>
-                      <td className="num">{p.currentQty ?? 0}</td>
-                    </tr>
-                  ))}
-                  {inventory.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="empty">
-                        No inventory loaded yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* RIGHT: Sales */}
-          <section className="panel">
-            <div className="panel-header">
-              <h2>Sales products (Django @ :5000)</h2>
-              <span className="panel-count">
-                {sales.length} items
-              </span>
-            </div>
-
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
+                ))}
+                {inventory.length === 0 && (
                   <tr>
-                    <th>SKU</th>
-                    <th>Name</th>
-                    <th>Unit</th>
-                    <th className="num">Price</th>
-                    <th className="num">Stock</th>
+                    <td colSpan={5} className="empty">
+                      No inventory loaded yet.
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {sales.map((p) => (
-                    <tr key={p.sku}>
-                      <td>{p.sku}</td>
-                      <td>{p.name}</td>
-                      <td>{p.unit}</td>
-                      <td className="num">{p.price}</td>
-                      <td className="num">{p.stock_qty ?? "-"}</td>
-                    </tr>
-                  ))}
-                  {sales.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="empty">
-                        No sales products loaded yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* RIGHT: Sales */}
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Sales products (Django @ :5000)</h2>
+            <span className="panel-count">{sales.length} items</span>
+          </div>
+
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Name</th>
+                  <th>Unit</th>
+                  <th className="num">Price</th>
+                  <th className="num">Stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sales.map((p) => (
+                  <tr key={p.sku}>
+                    <td>{p.sku}</td>
+                    <td>{p.name}</td>
+                    <td>{p.unit}</td>
+                    <td className="num">{p.price}</td>
+                    <td className="num">{p.stock_qty ?? "-"}</td>
+                  </tr>
+                ))}
+                {sales.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="empty">
+                      No sales products loaded yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </main>
     </div>
   );
 }
-
 
 export default App;

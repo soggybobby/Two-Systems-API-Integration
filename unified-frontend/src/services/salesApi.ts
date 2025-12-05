@@ -1,34 +1,43 @@
-// src/services/salesApi.ts
+// unified-frontend/src/services/salesApi.ts
 import axios from "axios";
 
-export const SALES_API_BASE = "http://127.0.0.1:5000";
+const SALES_API_BASE = "http://localhost:5000";
 
-export interface SalesProduct {
-  id?: number;
+export type SalesProduct = {
   sku: string;
   name: string;
   unit: string;
-  price?: number;
-  listPrice?: number;
+  price: number;
   stock_qty?: number | null;
-  is_active?: boolean;
-}
+};
 
 /**
- * Get products from Sales_System (/shop/products/)
+ * GET active products from Django (used by dashboard)
+ * Endpoint: GET /products/
  */
 export async function getSalesProducts(): Promise<SalesProduct[]> {
-  const url = `${SALES_API_BASE}/shop/products/`;
-  const res = await axios.get(url);
+  const url = `${SALES_API_BASE}/products/`;
+  const res = await axios.get<SalesProduct[]>(url);
   return res.data;
 }
 
 /**
  * Inventory → Sales
- * Calls Django DRF endpoint /api/sync-from-inventory/
+ * Django endpoint: GET /api/sync-from-inventory/
  */
-export async function syncInventoryToSales() {
+export async function syncInventoryToSales(): Promise<any> {
   const url = `${SALES_API_BASE}/api/sync-from-inventory/`;
   const res = await axios.get(url);
-  return res.data; // { message, received, updated, ... }
+  return res.data;
+}
+
+/**
+ * Sales → Inventory
+ * Django endpoint: POST /api/sync-to-inventory/
+ * Django will then POST to Node /products/sync-from-sales.
+ */
+export async function syncSalesToInventory(): Promise<any> {
+  const url = `${SALES_API_BASE}/api/sync-to-inventory/`;
+  const res = await axios.post(url); // no body needed
+  return res.data;
 }

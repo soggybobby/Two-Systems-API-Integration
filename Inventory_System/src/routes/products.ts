@@ -10,19 +10,27 @@ const SALES_SYSTEM_API = "http://127.0.0.1:5000/shop";
 
 /* ------------------------- Helpers / Schemas ------------------------- */
 
-/** Django may return Decimal fields as strings; coerce safely */
+/** Convert string/number to number safely */
 const toNumber = (v: unknown, fallback = 0): number => {
-  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
+  const n =
+    typeof v === "string"
+      ? Number(v)
+      : typeof v === "number"
+      ? v
+      : NaN;
   return Number.isFinite(n) ? n : fallback;
 };
 
-/** Shape we expect from Sales_System when it POSTs to us */
+/**
+ * Shape we expect from Sales_System when it POSTs to us
+ * via /products/sync-from-sales
+ */
 const SalesProductSchema = z.object({
   sku: z.string().min(1),
   name: z.string().min(1),
   description: z.string().nullable().optional(),
   unit: z.string().min(1).optional(),                 // default to "pcs" below
-  price: z.union([z.number(), z.string()]).optional(), // Decimal may be string
+  price: z.union([z.number(), z.string()]).optional(), // Django Decimal might be string
   stock_qty: z.union([z.number().int(), z.string()]).optional(),
 });
 const SalesProductArraySchema = z.array(SalesProductSchema);
@@ -31,11 +39,18 @@ const SalesProductArraySchema = z.array(SalesProductSchema);
 
 /** Get all products from our local Prisma DB */
 router.get("/", async (_req, res) => {
-  const products = await prisma.product.findMany({ orderBy: { updatedAt: "desc" } });
+  const products = await prisma.product.findMany({
+    orderBy: { updatedAt: "desc" },
+  });
   res.json(products);
 });
 
-/** Inventory ← Sales: receiver endpoint for Sales_System to push products here */
+/**
+ * Inventory ← Sales
+ * Receiver endpoint for Sales_System to push products here.
+ * Django sends {sku, name, unit, price, stock_qty}.
+ * We store them as listPrice + currentQty in Prisma.
+ */
 router.post("/sync-from-sales", async (req, res) => {
   try {
     const parsed = SalesProductArraySchema.safeParse(req.body);
@@ -55,8 +70,8 @@ router.post("/sync-from-sales", async (req, res) => {
           name: p.name,
           description: p.description ?? "",
           unit: p.unit ?? "pcs",
-          listPrice: toNumber(p.price, 0),
-          currentQty: toNumber(p.stock_qty, 0),
+          listPrice: toNumber(p.price, 0),        // 👈 use price
+          currentQty: toNumber(p.stock_qty, 0),   // 👈 use stock_qty
         },
         create: {
           sku: p.sku,
@@ -79,7 +94,10 @@ router.post("/sync-from-sales", async (req, res) => {
   }
 });
 
-/** Inventory → Sales: pull products from Django and upsert locally */
+/**
+ * Inventory → Sales
+ * Pull products from Django and upsert locally (used by /products/sync)
+ */
 router.get("/sync", async (_req, res) => {
   try {
     const response = await axios.get(`${SALES_SYSTEM_API}/products/`);
@@ -93,6 +111,7 @@ router.get("/sync", async (_req, res) => {
           description: p.description || "",
           unit: p.unit || "pcs",
           listPrice: toNumber(p.price, 0),
+          // we do not touch currentQty here (Inventory is source of truth)
         },
         create: {
           sku: p.sku,
@@ -146,7 +165,9 @@ router.post("/", async (req, res) => {
 
 /** Get single product by SKU */
 router.get("/:sku", async (req, res) => {
-  const product = await prisma.product.findUnique({ where: { sku: req.params.sku } });
+  const product = await prisma.product.findUnique({
+    where: { sku: req.params.sku },
+  });
   if (!product) return res.status(404).json({ error: "Not found" });
   res.json(product);
 });

@@ -1,8 +1,11 @@
+# sales/api_inventory.py
 import requests
 from decimal import Decimal, InvalidOperation
 from django.conf import settings
 from django.db import transaction
+
 from .models import Product
+
 
 def _headers():
     h = {}
@@ -10,10 +13,19 @@ def _headers():
         h["Authorization"] = f"Bearer {settings.INVENTORY_API_KEY}"
     return h
 
+
 def fetch_inventory_products():
     """
     Calls Inventory_System GET /products
-    Expected fields per product: sku, name, description?, unit, listPrice, status, currentQty
+
+    Expected fields per product (from Node + Prisma):
+      - sku
+      - name
+      - description? (optional)
+      - unit
+      - listPrice
+      - status
+      - currentQty
     """
     base = getattr(settings, "INVENTORY_API_BASE", "http://127.0.0.1:3001")
     url = f"{base}/products"
@@ -21,30 +33,36 @@ def fetch_inventory_products():
     r.raise_for_status()
     return r.json()
 
+
 def _to_decimal(val, default="0"):
+    """
+    Safely convert whatever we get (number/string/None) into Decimal.
+    """
     if val is None or val == "":
         val = default
     try:
-        # Accept numbers or numeric strings
         return Decimal(str(val))
     except (InvalidOperation, TypeError):
         return Decimal(default)
 
+
 @transaction.atomic
 def upsert_into_sales(products):
     """
-    Inventory -> Sales field mapping:
-      listPrice -> price (Decimal)
+    Inventory → Sales field mapping:
+
+      listPrice  -> price (Decimal)
       currentQty -> stock_qty (int)
       status == 'ACTIVE' -> is_active True else False
+
     Returns a rich result for diagnostics.
     """
     result = {
         "received": len(products),
         "created": [],
         "updated": [],
-        "skipped": [],   # [{sku, reason}]
-        "errors": []     # [{sku, error}]
+        "skipped": [],  # [{sku, reason}]
+        "errors": [],   # [{sku, error}]
     }
 
     for p in products:
@@ -61,7 +79,6 @@ def upsert_into_sales(products):
             stock_qty = int(p.get("currentQty") or 0)
             is_active = (str(p.get("status") or "ACTIVE").upper() == "ACTIVE")
 
-            # Basic validation
             if not name:
                 result["skipped"].append({"sku": sku, "reason": "empty name"})
                 continue
