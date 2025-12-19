@@ -1,3 +1,4 @@
+# sales/models.py
 from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator
@@ -29,10 +30,9 @@ class Sale(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.sale_no:
-            # Simple unique sale number like 2025-xxxxx
             self.sale_no = timezone.now().strftime("%Y%m%d") + "-" + str(uuid.uuid4().hex[:6]).upper()
         super().save(*args, **kwargs)
-        # Recompute after items exist
+
         total = sum(item.line_total for item in self.items.all())
         if self.total_amount != total:
             self.total_amount = total
@@ -58,16 +58,32 @@ class SaleItem(models.Model):
 
     def __str__(self):
         return f"{self.product_name} x{self.qty}"
-    
+
+
 class Product(models.Model):
     sku = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
     unit = models.CharField(max_length=30, default="pcs")
+
+    # base price from inventory
     price = models.DecimalField(max_digits=12, decimal_places=2)
-    stock_qty = models.PositiveIntegerField(default=0)   # <--- NEW
+
+    # inventory stock
+    stock_qty = models.PositiveIntegerField(default=0)
+
+    # admin approval flag
+    published_to_shop = models.BooleanField(default=False)
+
+    # optional override sale price (if set, this is what customer sees)
+    sale_price_override = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+
     is_active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    @property
+    def effective_price(self):
+        return self.sale_price_override if self.sale_price_override is not None else self.price
+
     def __str__(self):
         return f"{self.sku} – {self.name}"
-

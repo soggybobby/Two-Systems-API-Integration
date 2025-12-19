@@ -2,6 +2,9 @@ from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.db import transaction
+from django.conf import settings
+import requests
+
 from .models import Customer, Sale, SaleItem, Product
 
 
@@ -20,11 +23,33 @@ def _save_cart(request, cart):
     request.session.modified = True
 
 
+def _inventory_base():
+    return getattr(settings, "INVENTORY_API_BASE", "http://127.0.0.1:3001")
+
+
+def _deduct_inventory_stock(ref_id: str, items):
+    """
+    Calls Inventory_System POST /stock/adjust
+    items: [{"sku": "ABC-01", "qty": 2}, ...]
+    Returns (ok: bool, data_or_error: dict/str)
+    """
+    url = f"{_inventory_base()}/stock/adjust"
+    payload = {
+        "refType": "SALE",
+        "refId": ref_id,
+        "items": items
+    }
+    try:
+        r = requests.post(url, json=payload, timeout=10)
+        if r.status_code == 200:
+            return True, r.json()
+        return False, f"{r.status_code} {r.text}"
+    except Exception as e:
+        return False, str(e)
+
+
 def shop_home(request):
-    """
-    Storefront home – show active products from DB.
-    """
-    products = Product.objects.filter(is_active=True).order_by("name")
+    products = Product.objects.filter(is_active=True, published_to_shop=True).order_by("name")
     cart = _cart(request)
     total_items = sum(item["qty"] for item in cart.values())
     return render(request, "sales/shop_home.html", {
@@ -35,9 +60,6 @@ def shop_home(request):
 
 @require_POST
 def add_to_cart(request):
-    """
-    Add a product to the cart. Uses DB product and validates stock.
-    """
     sku = request.POST.get("sku")
     try:
         qty = int(request.POST.get("qty", "1"))
@@ -59,22 +81,20 @@ def add_to_cart(request):
     new_total = current_qty + max(qty, 1)
 
     if new_total > p.stock_qty:
-        # cap at available stock
         cart[sku] = {
             "name": p.name,
             "unit": p.unit,
-            "price": float(p.price),
+            "price": float(p.effective_price),
             "qty": p.stock_qty,
         }
         _save_cart(request, cart)
         messages.warning(request, f"Only {p.stock_qty} × {p.name} available. Cart updated.")
         return redirect("shop_home")
 
-    # ok to add
     cart[sku] = {
         "name": p.name,
         "unit": p.unit,
-        "price": float(p.price),
+        "price": float(p.effective_price),
         "qty": new_total,
     }
     _save_cart(request, cart)
@@ -84,9 +104,6 @@ def add_to_cart(request):
 
 @require_POST
 def remove_from_cart(request):
-    """
-    Remove a single item from the cart by SKU.
-    """
     sku = request.POST.get("sku")
     cart = _cart(request)
     if sku in cart:
@@ -99,9 +116,6 @@ def remove_from_cart(request):
 
 
 def view_cart(request):
-    """
-    Render the cart with line totals and grand total.
-    """
     cart = _cart(request)
     items = []
     total = 0.0
@@ -114,15 +128,10 @@ def view_cart(request):
 
 @require_POST
 def update_cart(request):
-    """
-    Bulk update quantities. Removes items if qty <= 0.
-    Caps quantities to available stock.
-    """
     cart = _cart(request)
     messages_list = []
 
     for sku, item in list(cart.items()):
-        # read desired qty
         try:
             new_qty = int(request.POST.get(f"qty_{sku}", item["qty"]))
         except ValueError:
@@ -133,7 +142,6 @@ def update_cart(request):
             messages_list.append(f"Removed {item['name']}.")
             continue
 
-        # stock check
         try:
             p = Product.objects.get(sku=sku, is_active=True)
         except Product.DoesNotExist:
@@ -156,9 +164,6 @@ def update_cart(request):
 
 
 def checkout_form(request):
-    """
-    Simple guest checkout form.
-    """
     cart = _cart(request)
     if not cart:
         messages.error(request, "Your cart is empty.")
@@ -170,8 +175,9 @@ def checkout_form(request):
 @transaction.atomic
 def place_order(request):
     """
-    Create (or reuse) a Customer, validate stock, create Sale + SaleItems,
-    decrement stock, and clear the cart.
+    Create Customer, validate stock, create Sale + SaleItems,
+    deduct Inventory stock via API, update local stock_qty to match,
+    and clear the cart.
     """
     name = request.POST.get("name", "").strip()
     email = request.POST.get("email", "").strip()
@@ -184,7 +190,7 @@ def place_order(request):
     customer, _ = Customer.objects.get_or_create(
         email=email, defaults={"name": name, "phone": phone}
     )
-    # keep customer details fresh
+
     updated = []
     if name and customer.name != name:
         customer.name = name
@@ -200,15 +206,16 @@ def place_order(request):
         messages.error(request, "Your cart is empty.")
         return redirect("shop_home")
 
-    # Validate stock (lock rows to avoid races)
+    # Lock and validate local stock
     problems = []
-    locked_products = {}  # sku -> Product
+    locked_products = {}
     for sku, item in cart.items():
         try:
             p = Product.objects.select_for_update().get(sku=sku, is_active=True)
         except Product.DoesNotExist:
             problems.append(f"{sku} is no longer available.")
             continue
+
         if item["qty"] > p.stock_qty:
             problems.append(f"{p.name} – only {p.stock_qty} left.")
         locked_products[sku] = p
@@ -217,8 +224,27 @@ def place_order(request):
         messages.error(request, "Cannot place order: " + " ".join(problems))
         return redirect("view_cart")
 
-    # Create sale + items, decrement stock
+    # Create sale first (so we have a reference id)
     sale = Sale.objects.create(customer=customer, status="NEW")
+
+    # Call Inventory to deduct stock
+    inv_items = [{"sku": sku, "qty": int(item["qty"])} for sku, item in cart.items()]
+    ok, inv_result = _deduct_inventory_stock(ref_id=f"S-{sale.pk}", items=inv_items)
+
+    if not ok:
+        # rollback whole transaction
+        raise Exception(f"Inventory stock adjust failed: {inv_result}")
+
+    # Update local Product.stock_qty using returned "after" values when available
+    # inv_result shape: { results: [{ sku, ok, before, after, deducted }, ...] }
+    results = inv_result.get("results", [])
+    bad = [r for r in results if not r.get("ok")]
+    if bad:
+        raise Exception(f"Inventory refused some items: {bad}")
+
+    after_map = {r["sku"]: r.get("after") for r in results if r.get("ok")}
+
+    # Create sale items and set local stock_qty to match Inventory after
     for sku, item in cart.items():
         p = locked_products[sku]
         SaleItem.objects.create(
@@ -227,15 +253,15 @@ def place_order(request):
             product_name=p.name,
             unit=p.unit,
             qty=item["qty"],
-            unit_price=p.price,  # trust DB price at checkout
+            unit_price=p.effective_price,
         )
-        p.stock_qty -= item["qty"]
+        if sku in after_map and after_map[sku] is not None:
+            p.stock_qty = int(after_map[sku])
+        else:
+            # fallback, still decrement locally
+            p.stock_qty -= int(item["qty"])
         p.save(update_fields=["stock_qty"])
 
-    # recompute total on sale
     sale.save()
-
-    # clear cart
     _save_cart(request, {})
-
     return render(request, "sales/order_success.html", {"sale": sale})

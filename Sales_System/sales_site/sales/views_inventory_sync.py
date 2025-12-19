@@ -33,22 +33,11 @@ def pull_from_inventory(request):
 def push_to_inventory(request):
     """
     Sales → Inventory: push all Django products into Inventory_System.
-
-    Node /products/sync-from-sales expects each item shaped like:
-      {
-        "sku":        string,
-        "name":       string,
-        "description":string?,
-        "unit":       string?,
-        "price":      number|string?,
-        "stock_qty":  number|string?
-      }
     """
     try:
-        # Only use fields that actually exist on Product
         products = list(
             Product.objects.values(
-                "sku", "name", "unit", "price", "stock_qty"
+                "sku", "name", "description", "unit", "price", "stock_qty"
             )
         )
 
@@ -57,33 +46,29 @@ def push_to_inventory(request):
             payload.append({
                 "sku": str(p["sku"]).strip().upper(),
                 "name": p["name"],
-                # Product model has no description yet, so just send empty string
-                "description": "",
+                "description": p.get("description") or "",
                 "unit": p.get("unit") or "pcs",
-                "price": str(p["price"]),              # string, Node will number-ify it
-                "stock_qty": int(p.get("stock_qty") or 0),
+                "price": str(p["price"]),                 # important
+                "stock_qty": int(p.get("stock_qty") or 0) # important
             })
 
         base = getattr(settings, "INVENTORY_API_BASE", "http://127.0.0.1:3001")
         url = f"{base}/products/sync-from-sales"
-
         resp = requests.post(url, json=payload, timeout=10)
 
         if resp.status_code == 200:
             return Response({
-                "message": "Pushed Sales → Inventory",
+                "message": "✅ Pushed Sales → Inventory",
                 "count": len(payload),
                 "inventory_response": resp.json(),
             })
 
         return Response(
-            {
-                "message": "Inventory_System returned non-200",
-                "status": resp.status_code,
-                "body": resp.text,
-            },
-            status=500,
+            {"status": resp.status_code, "body": resp.text},
+            status=500
         )
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+

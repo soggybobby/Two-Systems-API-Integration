@@ -1,7 +1,8 @@
-# sales/views.py
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from django.conf import settings
+import requests
 
 from .models import Customer, Sale, Product
 from .serializers import CustomerSerializer, SaleSerializer
@@ -20,54 +21,79 @@ class SaleViewSet(viewsets.ModelViewSet):
 @api_view(["GET"])
 def product_list(request):
     """
-    JSON product list used by:
-      - Node Inventory_System (/shop/products/)
-      - unified-frontend React dashboard (Load Sales products)
-
-    We return:
-        sku, name, description (if any), unit, price (float), stock_qty
+    JSON list for shop + (optional) unified frontend.
+    Only show active AND published products.
+    Uses effective_price for sale override.
     """
-    qs = Product.objects.filter(is_active=True).order_by("name")
-
-    data = []
-    for p in qs:
-        data.append({
+    products = Product.objects.filter(is_active=True, published_to_shop=True).order_by("name")
+    data = [
+        {
             "sku": p.sku,
             "name": p.name,
-            # use getattr so it won't crash if 'description' field doesn't exist
-            "description": getattr(p, "description", ""),
             "unit": p.unit,
-            # keep as float so frontend stays the same as before
-            "price": float(p.price),
-            "stock_qty": p.stock_qty,
-        })
-
+            "price": float(p.effective_price),
+            "stock_qty": int(p.stock_qty),
+        }
+        for p in products
+    ]
     return Response(data)
 
 
 @api_view(["POST"])
 def checkout(request):
     """
-    body:
-    {
-      "customer": <customer_id>,
-      "items": [
-        {
-          "sku": "KB-001",
-          "product_name": "Mechanical Keyboard 87-key",
-          "unit": "pcs",
-          "qty": 1,
-          "unit_price": 1999.00
-        }
-      ]
-    }
+    Creates the Sale in Django, then deducts stock in Inventory_System via:
+      POST {INVENTORY_API_BASE}/stock/adjust
     """
     payload = {
         "customer": request.data.get("customer"),
         "status": "NEW",
         "items": request.data.get("items", []),
     }
+
     ser = SaleSerializer(data=payload)
     ser.is_valid(raise_exception=True)
     sale = ser.save()
+
+    # Build the inventory adjustment payload from request items
+    # Expected request item shape:
+    # {"sku":"ABC-01","qty":2,...}
+    items = []
+    for it in payload["items"]:
+        sku = str(it.get("sku", "")).strip().upper()
+        qty = int(it.get("qty") or 0)
+        if sku and qty > 0:
+            items.append({"sku": sku, "qty": qty})
+
+    # If there are items, notify Inventory_System to deduct qty
+    if items:
+        base = getattr(settings, "INVENTORY_API_BASE", "http://127.0.0.1:3001")
+        url = f"{base}/stock/adjust"
+
+        # Use sale_no if you have it, else fallback to sale.id
+        ref_id = getattr(sale, "sale_no", None) or str(sale.id)
+
+        inv_payload = {
+            "refType": "SALE",
+            "refId": ref_id,
+            "items": items,
+        }
+
+        try:
+            resp = requests.post(url, json=inv_payload, timeout=10)
+            resp.raise_for_status()
+        except Exception as e:
+            # Sale is already created, but inventory failed.
+            # Return a clear error so you can see it on the frontend.
+            return Response(
+                {
+                    "error": "Sale created, but failed to deduct inventory",
+                    "sale": SaleSerializer(sale).data,
+                    "inventory_url": url,
+                    "inventory_payload": inv_payload,
+                    "details": str(e),
+                },
+                status=502,
+            )
+
     return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)

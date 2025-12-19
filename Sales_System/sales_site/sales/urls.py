@@ -2,6 +2,8 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from .inventory_events import inventory_event
+from .views_inventory_events import inventory_product_upsert
 
 from sales.views import (
     CustomerViewSet,
@@ -29,7 +31,6 @@ router.register(r"products",  ProductViewSet)
 urlpatterns = [
     # Admin
     # If admin is already in sales_site/sales_site/urls.py, comment this to avoid duplicate namespace warnings.
-    path("admin/", admin.site.urls),
 
     # Home
     path("", shop_home, name="home"),
@@ -54,4 +55,6 @@ urlpatterns = [
     # Inventory ↔ Sales sync
     path("api/sync-from-inventory/", pull_from_inventory, name="sync_from_inventory"),  # GET
     path("api/sync-to-inventory/",   push_to_inventory,  name="sync_to_inventory"),    # POST
+    path("api/inventory-event/", inventory_event, name="inventory_event"),
+    path("api/inventory-events/product-upsert/", inventory_product_upsert, name="inventory_product_upsert"),
 ]

@@ -8,15 +8,20 @@ datasource db {
 }
 
 model Product {
-  id          Int      @id @default(autoincrement())
-  sku         String   @unique
-  name        String
-  description String?
-  unit        String   // pcs, box, kg
-  listPrice   Decimal? @db.Decimal(10,2)
-  status      String   @default("ACTIVE")
-  currentQty  Int?     // optional cache for fast reads
-  updatedAt   DateTime @updatedAt
+  id               Int      @id @default(autoincrement())
+  sku              String   @unique
+  name             String
+  description      String?
+  unit             String
+  listPrice        Decimal? @db.Decimal(10,2)
+
+  // NEW: admin approval + price override
+  publishedToShop  Boolean  @default(false)
+  salePriceOverride Decimal? @db.Decimal(10,2)
+
+  status           String   @default("ACTIVE")
+  currentQty       Int?
+  updatedAt        DateTime @updatedAt
 
   ledger InventoryLedger[]
 }
@@ -25,14 +30,29 @@ model InventoryLedger {
   id         Int      @id @default(autoincrement())
   sku        String
   product    Product  @relation(fields: [sku], references: [sku])
-  txnType    String   // SALE, PUR, ADJ+, ADJ-, RTN_IN, RTN_OUT, XFER_IN, XFER_OUT
+  txnType    String
   qtyChange  Int
-  refType    String?  // SALE, PO, ADJ
-  refId      String?  // foreign reference id
+  refType    String?
+  refId      String?
   note       String?
   createdAt  DateTime @default(now())
 
   @@index([sku, createdAt])
-  // Optional idempotency for external events
-  // @@unique([refType, refId, sku])
+}
+
+//
+// NEW: Outbox table for retryable event delivery
+//
+model OutboxEvent {
+  id            Int      @id @default(autoincrement())
+  eventType     String
+  payload       Json
+  status        String   @default("PENDING") // PENDING, SENT, FAILED
+  attempts      Int      @default(0)
+  nextAttemptAt DateTime @default(now())
+  lastError     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
 }
