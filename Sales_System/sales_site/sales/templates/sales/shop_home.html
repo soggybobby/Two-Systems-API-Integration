@@ -8,22 +8,39 @@
       <h3>{{ p.name }}</h3>
       <p><b>SKU:</b> {{ p.sku }}</p>
       <p><b>Unit:</b> {{ p.unit }}</p>
+
       <p>
-        {% if p.stock_qty > 0 %}
-          <span class="in-stock">In stock: {{ p.stock_qty }}</span>
-        {% else %}
-          <span class="out-stock">Out of stock</span>
-        {% endif %}
+        <span
+          id="stock-{{ p.sku }}"
+          class="{% if p.stock_qty > 0 %}in-stock{% else %}out-stock{% endif %}">
+          {% if p.stock_qty > 0 %}
+            In stock: {{ p.stock_qty }}
+          {% else %}
+            Out of stock
+          {% endif %}
+        </span>
       </p>
+
       <p><b>₱{{ p.price|floatformat:2 }}</b></p>
 
       <form method="post" action="{% url 'add_to_cart' %}">
         {% csrf_token %}
         <input type="hidden" name="sku" value="{{ p.sku }}">
-        <input type="number" name="qty" value="1" min="1" style="width:70px"
-               {% if p.stock_qty <= 0 %}disabled{% endif %}>
-        <button type="submit" class="btn"
-                {% if p.stock_qty <= 0 %}disabled{% endif %}>
+
+        <input
+          id="qty-{{ p.sku }}"
+          type="number"
+          name="qty"
+          value="1"
+          min="1"
+          style="width:70px"
+          {% if p.stock_qty <= 0 %}disabled{% endif %}>
+
+        <button
+          id="btn-{{ p.sku }}"
+          type="submit"
+          class="btn"
+          {% if p.stock_qty <= 0 %}disabled{% endif %}>
           {% if p.stock_qty > 0 %}Add to cart{% else %}Unavailable{% endif %}
         </button>
       </form>

@@ -8,28 +8,34 @@ datasource db {
 }
 
 model Product {
-  id               Int      @id @default(autoincrement())
-  sku              String   @unique
-  name             String
-  description      String?
-  unit             String
-  listPrice        Decimal? @db.Decimal(10,2)
+  id                Int      @id @default(autoincrement())
+  sku               String   @unique
+  name              String
+  description       String?
+  unit              String
+  listPrice         Decimal? @db.Decimal(10,2)
 
-  // NEW: admin approval + price override
-  publishedToShop  Boolean  @default(false)
+  // admin approval + price override
+  publishedToShop   Boolean  @default(false)
   salePriceOverride Decimal? @db.Decimal(10,2)
 
-  status           String   @default("ACTIVE")
-  currentQty       Int?
-  updatedAt        DateTime @updatedAt
+  status            String   @default("ACTIVE")
 
-  ledger InventoryLedger[]
+  // changed: avoid null stock
+  currentQty        Int      @default(0)
+
+  updatedAt         DateTime @updatedAt
+
+  ledger            InventoryLedger[]
 }
 
 model InventoryLedger {
   id         Int      @id @default(autoincrement())
+
+  // relation uses SKU as foreign key to Product.sku
   sku        String
   product    Product  @relation(fields: [sku], references: [sku])
+
   txnType    String
   qtyChange  Int
   refType    String?
@@ -38,11 +44,11 @@ model InventoryLedger {
   createdAt  DateTime @default(now())
 
   @@index([sku, createdAt])
+
+  // added: idempotency so duplicate events do not double-apply
+  @@unique([refType, refId, sku])
 }
 
-//
-// NEW: Outbox table for retryable event delivery
-//
 model OutboxEvent {
   id            Int      @id @default(autoincrement())
   eventType     String

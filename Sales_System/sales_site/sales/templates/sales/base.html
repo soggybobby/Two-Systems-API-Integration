@@ -15,11 +15,35 @@
     .right { text-align:right; }
     .flash { padding:8px 12px; background:#eef; border:1px solid #ccd; border-radius:8px; margin:10px 0; }
     form.inline { display:inline-block; }
+
+    /* WebSocket indicator */
+    .ws-status {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      margin-left: 10px;
+      background: #eee;
+      color: #555;
+    }
+    .ws-online {
+      background: #e6ffea;
+      color: #0a7a2f;
+      border: 1px solid #9fe0b5;
+    }
+    .ws-offline {
+      background: #ffecec;
+      color: #8a1c1c;
+      border: 1px solid #f1b0b0;
+    }
   </style>
 </head>
 <body>
+
 <header>
-  <div><a class="btn" href="{% url 'shop_home' %}">🏠 Home</a></div>
+  <div>
+    <a class="btn" href="{% url 'shop_home' %}">🏠 Home</a>
+    <span id="wsStatus" class="ws-status ws-offline">WS: offline</span>
+  </div>
   <nav>
     <a class="btn" href="{% url 'view_cart' %}">🛒 Cart</a>
     <a class="btn" href="/admin/">Admin</a>
@@ -33,5 +57,69 @@
 {% endif %}
 
 {% block content %}{% endblock %}
+
+<!-- Socket.IO client -->
+<script src="http://127.0.0.1:3001/socket.io/socket.io.js"></script>
+<script>
+(function () {
+  if (typeof io === "undefined") return;
+
+  const statusEl = document.getElementById("wsStatus");
+
+  const socket = io("http://127.0.0.1:3001", {
+    transports: ["websocket", "polling"],
+  });
+
+  socket.on("connect", () => {
+    if (statusEl) {
+      statusEl.textContent = "WS: online";
+      statusEl.classList.remove("ws-offline");
+      statusEl.classList.add("ws-online");
+    }
+  });
+
+  socket.on("disconnect", () => {
+    if (statusEl) {
+      statusEl.textContent = "WS: offline";
+      statusEl.classList.remove("ws-online");
+      statusEl.classList.add("ws-offline");
+    }
+  });
+
+  socket.on("stock:update", (payload) => {
+    const sku = payload.sku;
+    const qty = Number(payload.currentQty || 0);
+
+    const stockEl = document.getElementById("stock-" + sku);
+    const qtyEl = document.getElementById("qty-" + sku);
+    const btnEl = document.getElementById("btn-" + sku);
+
+    if (!stockEl) return;
+
+    if (qty > 0) {
+      stockEl.textContent = "In stock: " + qty;
+      stockEl.classList.remove("out-stock");
+      stockEl.classList.add("in-stock");
+
+      if (qtyEl) qtyEl.disabled = false;
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = "Add to cart";
+      }
+    } else {
+      stockEl.textContent = "Out of stock";
+      stockEl.classList.remove("in-stock");
+      stockEl.classList.add("out-stock");
+
+      if (qtyEl) qtyEl.disabled = true;
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.textContent = "Unavailable";
+      }
+    }
+  });
+})();
+</script>
+
 </body>
 </html>

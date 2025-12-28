@@ -1,5 +1,13 @@
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
+import pymysql
+pymysql.install_as_MySQLdb()
+
+# Django checks mysqlclient version via MySQLdb.*.
+# PyMySQL reports 1.4.6 for compatibility, so we override it.
+import MySQLdb
+MySQLdb.__version__ = "2.2.1"
+MySQLdb.version_info = (2, 2, 1, "final", 0)
 import os
 import sys
 
