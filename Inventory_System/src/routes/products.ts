@@ -1,100 +1,133 @@
-// Inventory_System/src/routes/products.ts
 import { Router } from "express";
-import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { getIO } from "../ws";
 
 const router = Router();
 
-// All products (admin/internal)
+/**
+ * GET /products
+ * Returns all products
+ */
 router.get("/", async (_req, res) => {
-  const products = await prisma.product.findMany({ orderBy: { updatedAt: "desc" } });
-  res.json(products);
-});
-
-// Public products for Sales storefront (only published + active)
-router.get("/public", async (_req, res) => {
-  const products = await prisma.product.findMany({
-    where: {
-      status: "ACTIVE",
-      publishedToShop: true,
-    },
+  const items = await prisma.product.findMany({
     orderBy: { updatedAt: "desc" },
   });
-
-  const data = products.map((p) => ({
-    sku: p.sku,
-    name: p.name,
-    description: p.description,
-    unit: p.unit,
-    listPrice: p.listPrice ? Number(p.listPrice) : 0,
-    salePriceOverride: p.salePriceOverride ? Number(p.salePriceOverride) : null,
-    effectivePrice: p.salePriceOverride ? Number(p.salePriceOverride) : (p.listPrice ? Number(p.listPrice) : 0),
-    currentQty: p.currentQty ?? 0,
-    publishedToShop: p.publishedToShop,
-    status: p.status,
-    updatedAt: p.updatedAt,
-  }));
-
-  res.json(data);
+  res.json(items);
 });
 
-// Create product (admin/internal)
-router.post("/", async (req, res) => {
-  const schema = z.object({
-    sku: z.string().min(1),
-    name: z.string().min(1),
-    description: z.string().optional(),
-    unit: z.string().min(1),
-    listPrice: z.coerce.number().nonnegative().optional(),
-    currentQty: z.coerce.number().int().optional(),
-    publishedToShop: z.boolean().optional(),
-    salePriceOverride: z.coerce.number().nonnegative().nullable().optional(),
-  });
+/**
+ * GET /products/:sku
+ * Returns a single product by SKU for Sales to fetch on WS notify
+ */
+router.get("/:sku", async (req, res) => {
+  const sku = req.params.sku.trim();
+  const product = await prisma.product.findUnique({ where: { sku } });
 
-  const data = schema.parse(req.body);
+  if (!product) return res.status(404).json({ detail: "Not found" });
+
+  res.json({
+    sku: product.sku,
+    name: product.name,
+    description: product.description ?? "",
+    unit: product.unit ?? "pcs",
+    listPrice: product.listPrice ? Number(product.listPrice) : 0,
+    salePriceOverride: product.salePriceOverride ? Number(product.salePriceOverride) : null,
+    publishedToShop: product.publishedToShop,
+    status: product.status,
+    currentQty: product.currentQty ?? 0,
+    updatedAt: product.updatedAt,
+  });
+});
+
+/**
+ * POST /products
+ * Create product + emit WS event
+ */
+router.post("/", async (req, res) => {
+  const data = req.body;
 
   const product = await prisma.product.create({
     data: {
-      sku: data.sku.trim().toUpperCase(),
+      sku: data.sku,
       name: data.name,
-      description: data.description ?? null,
-      unit: data.unit,
-      listPrice: data.listPrice ?? 0,
-      currentQty: data.currentQty ?? 0,
+      description: data.description ?? "",
+      unit: data.unit ?? "pcs",
+      listPrice: data.listPrice ?? null,
       publishedToShop: data.publishedToShop ?? false,
       salePriceOverride: data.salePriceOverride ?? null,
-      status: "ACTIVE",
+      status: data.status ?? "ACTIVE",
+      currentQty: data.currentQty ?? 0,
     },
   });
 
   res.status(201).json(product);
+
+  try {
+    getIO().emit("products:changed", {
+      sku: product.sku,
+      action: "created",
+      updatedAt: product.updatedAt,
+    });
+  } catch {}
 });
 
-// Update product (admin/internal)
+/**
+ * PATCH /products/:sku
+ * Update product + emit WS event
+ */
 router.patch("/:sku", async (req, res) => {
-  const sku = req.params.sku.trim().toUpperCase();
-
-  const schema = z.object({
-    name: z.string().optional(),
-    description: z.string().nullable().optional(),
-    unit: z.string().optional(),
-    listPrice: z.coerce.number().nonnegative().optional(),
-    currentQty: z.coerce.number().int().optional(),
-    publishedToShop: z.boolean().optional(),
-    salePriceOverride: z.coerce.number().nonnegative().nullable().optional(),
-    status: z.string().optional(),
-  });
-
-  const data = schema.parse(req.body);
+  const sku = req.params.sku.trim();
+  const data = req.body;
 
   const updated = await prisma.product.update({
     where: { sku },
     data: {
-      ...data,
+      name: data.name,
+      description: data.description,
+      unit: data.unit,
+      listPrice: data.listPrice,
+      publishedToShop: data.publishedToShop,
+      salePriceOverride: data.salePriceOverride,
+      status: data.status,
+      currentQty: data.currentQty,
     },
   });
 
   res.json(updated);
+
+  try {
+    getIO().emit("products:changed", {
+      sku: updated.sku,
+      action: "updated",
+      updatedAt: updated.updatedAt,
+    });
+  } catch {}
+});
+
+/**
+ * DELETE /products/:sku
+ * Delete product + emit WS event
+ */
+router.delete("/:sku", async (req, res) => {
+  const sku = req.params.sku.trim();
+
+  try {
+    const deleted = await prisma.product.delete({ where: { sku } });
+    res.json({ ok: true, sku: deleted.sku });
+
+    try {
+      getIO().emit("products:changed", {
+        sku: deleted.sku,
+        action: "deleted",
+        updatedAt: new Date(),
+      });
+    } catch {}
+  } catch (err: any) {
+    if (err?.code === "P2025") {
+      return res.status(404).json({ detail: "Not found" });
+    }
+    return res.status(500).json({ detail: "Delete failed" });
+  }
 });
 
 export default router;

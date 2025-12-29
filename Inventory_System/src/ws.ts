@@ -1,29 +1,27 @@
-import type http from "http";
-import { Server as IOServer } from "socket.io";
+import type { Server as HTTPServer } from "http";
+import { Server } from "socket.io";
 
-let io: IOServer | null = null;
+let io: Server | null = null;
 
-export function initWebsocket(server: http.Server) {
-  io = new IOServer(server, {
+export function initSocket(server: HTTPServer) {
+  io = new Server(server, {
     cors: {
-      origin: [
-        "http://127.0.0.1:5000",
-        "http://localhost:5000",
-      ],
-      methods: ["GET", "POST"],
-      credentials: true,
+      origin: "*",
+      methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
     },
   });
 
   io.on("connection", (socket) => {
-    console.log("[WS] connected:", socket.id);
-    socket.emit("ws:hello", { ok: true });
+    console.log("[Inventory WS] client connected:", socket.id);
+    socket.on("disconnect", () => {
+      console.log("[Inventory WS] client disconnected:", socket.id);
+    });
   });
 
   return io;
 }
 
-export function getIO() {
-  if (!io) throw new Error("Socket.IO not initialized");
+export function getIO(): Server {
+  if (!io) throw new Error("Socket.IO not initialized. Call initSocket(server) first.");
   return io;
 }

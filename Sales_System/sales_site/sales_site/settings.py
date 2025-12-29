@@ -10,6 +10,7 @@ DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
+    "sales.apps.SalesConfig",
     "corsheaders", 
     "django.contrib.admin",
     "django.contrib.auth",
@@ -18,7 +19,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "sales",
 ]
 
 # Enable PyMySQL if you installed it instead of mysqlclient

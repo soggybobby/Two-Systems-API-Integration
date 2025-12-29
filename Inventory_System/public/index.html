@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Inventory Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<style>
+:root{
+  --panel:#020617; --border:#1e293b;
+  --text:#e5e7eb; --muted:#94a3b8;
+  --accent:#38bdf8; --ok:#22c55e; --err:#ef4444; --warn:#f59e0b;
+}
+*{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{margin:0;background:radial-gradient(circle at top,#020617,#000);color:var(--text)}
+header{
+  padding:20px 24px;border-bottom:1px solid var(--border);
+  font-size:1.2rem;font-weight:700;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+header .right{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.badge{
+  display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--border);color:var(--muted);font-size:.75rem;
+}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--ok)}
+.dot.err{background:var(--err)}
+main{display:grid;gap:20px;padding:20px;grid-template-columns:1.35fr .65fr}
+@media (max-width: 980px){main{grid-template-columns:1fr}}
+.card{
+  background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;
+  box-shadow:0 16px 50px rgba(0,0,0,.45);
+}
+h2{margin:0 0 10px;font-size:1rem}
+small{color:var(--muted)}
+input,button,select,textarea{
+  width:100%;padding:10px;margin-top:6px;background:#020617;color:var(--text);
+  border:1px solid var(--border);border-radius:10px;outline:none;
+}
+textarea{min-height:78px;resize:vertical}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+.row{display:flex;gap:10px}
+label{display:flex;gap:10px;align-items:center;margin:12px 0;color:var(--muted);font-size:.9rem}
+button{
+  border:none;font-weight:800;cursor:pointer;
+  background:linear-gradient(135deg,var(--accent),#0ea5e9);color:#020617;
+}
+button:active{transform:scale(.985)}
+.btn-secondary{
+  background:#0b1225;color:var(--text);border:1px solid var(--border);
+}
+.btn-danger{
+  background:linear-gradient(135deg,#fb7185,#ef4444);color:#020617;
+}
+.btn-warn{
+  background:linear-gradient(135deg,#fbbf24,var(--warn));color:#020617;
+}
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:10px}
+th,td{border-bottom:1px solid var(--border);padding:8px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:700}
+tr:hover td{background:rgba(56,189,248,.04)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--border);color:var(--muted);font-size:.75rem;
+}
+.pill.ok{border-color:rgba(34,197,94,.5);color:var(--ok)}
+.pill.off{border-color:rgba(148,163,184,.35);color:var(--muted)}
+/* Toast */
+.toast{
+  position:fixed;bottom:24px;right:24px;background:#020617;border:1px solid var(--border);
+  padding:14px 18px;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.6);
+  font-size:.9rem;opacity:0;transform:translateY(10px);transition:all .25s ease;
+  pointer-events:none;max-width:420px;line-height:1.2rem;
+}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{border-color:var(--ok);color:var(--ok)}
+.toast.err{border-color:var(--err);color:var(--err)}
+.toast.warn{border-color:var(--warn);color:var(--warn)}
+/* Modal */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;
+  padding:18px;
+}
+.modal-backdrop.show{display:flex}
+.modal{
+  width:min(720px,100%);background:#020617;border:1px solid var(--border);
+  border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,.7);padding:16px;
+}
+.modal-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.modal-head h3{margin:0;font-size:1rem}
+.modal-head .spacer{margin-left:auto}
+hr{border:none;border-top:1px solid var(--border);margin:12px 0}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+</style>
+</head>
+
+<body>
+<header>
+  Inventory Dashboard
+  <span class="badge">
+    <span id="statusDot" class="dot"></span>
+    <span id="statusText">Loaded</span>
+  </span>
+  <div class="right">
+    <input id="search" placeholder="Search SKU / name..." style="max-width:260px" />
+    <button id="refreshBtn" class="btn-secondary" style="max-width:140px">Refresh</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: PRODUCTS + LEDGER -->
+  <div class="card">
+    <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+      <div style="flex:1">
+        <h2 style="margin-bottom:4px">Products</h2>
+        <small>Uses <span class="code">GET /products</span>. Create/Update via API triggers WS to Sales.</small>
+      </div>
+      <button id="openCreateBtn" style="max-width:170px">+ New Product</button>
+    </div>
+
+    <table id="products">
+      <thead>
+        <tr>
+          <th style="width:130px">SKU</th>
+          <th>Name</th>
+          <th style="width:100px">Price</th>
+          <th style="width:70px">Qty</th>
+          <th style="width:120px">Published</th>
+          <th style="width:170px">Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <hr />
+
+    <h2 style="margin-bottom:4px">Inventory Ledger</h2>
+    <small>Uses <span class="code">GET /ledger</span>, add via <span class="code">POST /ledger</span>.</small>
+
+    <table id="ledger">
+      <thead>
+        <tr>
+          <th style="width:130px">SKU</th>
+          <th style="width:90px">Type</th>
+          <th style="width:90px">Change</th>
+          <th>Note</th>
+          <th style="width:170px">Time</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- RIGHT: QUICK ADD LEDGER -->
+  <div class="card">
+    <h2>Add Ledger Record</h2>
+    <small>Calls <span class="code">POST /ledger</span> (triggers stock WS).</small>
+
+    <form id="ledgerForm">
+      <input name="sku" placeholder="SKU" required />
+      <select name="txnType" required>
+        <option value="PUR">PUR</option>
+        <option value="SALE">SALE</option>
+        <option value="ADJ+">ADJ+</option>
+        <option value="ADJ-">ADJ-</option>
+        <option value="RTN_IN">RTN_IN</option>
+        <option value="RTN_OUT">RTN_OUT</option>
+        <option value="XFER_IN">XFER_IN</option>
+        <option value="XFER_OUT">XFER_OUT</option>
+      </select>
+      <input name="qtyChange" type="number" placeholder="qtyChange (int, can be + or -)" required />
+      <input name="refType" placeholder="refType (optional)" />
+      <input name="refId" placeholder="refId (optional)" />
+      <textarea name="note" placeholder="note (optional)"></textarea>
+      <button type="submit">Add Record</button>
+    </form>
+
+    <hr />
+
+    <h2>Notes for Demo</h2>
+    <small>
+      Creating/updating products here uses the API, so Sales can receive the WS notify.
+      Prisma Studio direct DB edits will not emit WS events.
+    </small>
+  </div>
+</main>
+
+<!-- PRODUCT MODAL (CREATE/EDIT) -->
+<div id="modalBackdrop" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">New Product</h3>
+      <div class="spacer"></div>
+      <button id="closeModalBtn" class="btn-secondary" style="max-width:120px">Close</button>
+    </div>
+
+    <form id="productForm">
+      <input name="sku" placeholder="SKU" required />
+      <input name="name" placeholder="Name" required />
+      <textarea name="description" placeholder="Description (optional)"></textarea>
+
+      <div class="row">
+        <input name="unit" placeholder="Unit (default pcs)" />
+        <input name="listPrice" type="number" step="0.01" placeholder="listPrice" />
+      </div>
+
+      <div class="row">
+        <input name="currentQty" type="number" placeholder="currentQty" />
+        <input name="salePriceOverride" type="number" step="0.01" placeholder="salePriceOverride (optional)" />
+      </div>
+
+      <div class="row">
+        <select name="status">
+          <option value="ACTIVE">ACTIVE</option>
+          <option value="INACTIVE">INACTIVE</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:10px;width:100%;margin-top:6px">
+          <input type="checkbox" name="publishedToShop" id="publishedToShop" style="width:18px;height:18px;margin:0" />
+          <label for="publishedToShop" style="margin:0;color:var(--muted)">Published to Sales</label>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button id="saveBtn" type="submit">Save</button>
+        <button id="deleteBtn" type="button" class="btn-danger" style="display:none">Delete</button>
+      </div>
+    </form>
+
+    <pre id="productOut"></pre>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const toast = document.getElementById("toast");
+const statusDot = document.getElementById("statusDot");
+const statusText = document.getElementById("statusText");
+const productsTbody = document.querySelector("#products tbody");
+const ledgerTbody = document.querySelector("#ledger tbody");
+const searchInput = document.getElementById("search");
+const refreshBtn = document.getElementById("refreshBtn");
+
+const modalBackdrop = document.getElementById("modalBackdrop");
+const modalTitle = document.getElementById("modalTitle");
+const closeModalBtn = document.getElementById("closeModalBtn");
+const openCreateBtn = document.getElementById("openCreateBtn");
+const productForm = document.getElementById("productForm");
+const productOut = document.getElementById("productOut");
+const deleteBtn = document.getElementById("deleteBtn");
+const saveBtn = document.getElementById("saveBtn");
+
+let allProducts = [];
+let editingSku = null;
+
+function setStatus(ok, text){
+  statusDot.className = "dot " + (ok ? "ok" : "err");
+  statusText.textContent = text;
+}
+
+function showToast(message, type="ok"){
+  toast.textContent = message;
+  toast.className = "toast show " + type;
+  setTimeout(() => toast.classList.remove("show"), 2500);
+}
+
+async function fetchJson(url, opts){
+  const r = await fetch(url, opts);
+  const text = await r.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch {}
+  if(!r.ok){
+    const msg = (json && (json.detail || json.message)) ? (json.detail || json.message) : text;
+    throw new Error(`${r.status} ${msg}`.slice(0,240));
+  }
+  return json;
+}
+
+function openModal(mode, product){
+  productOut.textContent = "";
+  editingSku = mode === "edit" ? product.sku : null;
+
+  modalTitle.textContent = mode === "edit" ? `Edit Product: ${product.sku}` : "New Product";
+
+  // Fill form
+  productForm.sku.value = product?.sku ?? "";
+  productForm.name.value = product?.name ?? "";
+  productForm.description.value = product?.description ?? "";
+  productForm.unit.value = product?.unit ?? "pcs";
+  productForm.listPrice.value = product?.listPrice ?? "";
+  productForm.currentQty.value = product?.currentQty ?? 0;
+  productForm.salePriceOverride.value = product?.salePriceOverride ?? "";
+  productForm.status.value = product?.status ?? "ACTIVE";
+  productForm.publishedToShop.checked = !!product?.publishedToShop;
+
+  // SKU editable only on create
+  productForm.sku.disabled = mode === "edit";
+
+  deleteBtn.style.display = mode === "edit" ? "inline-block" : "none";
+  saveBtn.textContent = mode === "edit" ? "Update" : "Create";
+
+  modalBackdrop.classList.add("show");
+}
+
+function closeModal(){
+  modalBackdrop.classList.remove("show");
+  editingSku = null;
+}
+
+function formatMoney(v){
+  if(v === null || v === undefined || v === "") return "-";
+  return Number(v).toFixed(2);
+}
+
+function renderProducts(list){
+  productsTbody.innerHTML = "";
+  list.forEach(p => {
+    const pub = p.publishedToShop ? `<span class="pill ok">Yes</span>` : `<span class="pill off">No</span>`;
+    productsTbody.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td class="code">${p.sku ?? ""}</td>
+        <td>${p.name ?? ""}</td>
+        <td>${p.listPrice != null ? formatMoney(p.listPrice) : "-"}</td>
+        <td>${p.currentQty ?? 0}</td>
+        <td>${pub}</td>
+        <td>
+          <div class="actions">
+            <button class="btn-secondary" data-action="edit" data-sku="${p.sku}" style="max-width:90px">Edit</button>
+            <button class="btn-danger" data-action="delete" data-sku="${p.sku}" style="max-width:90px">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `);
+  });
+}
+
+function renderLedger(list){
+  ledgerTbody.innerHTML = "";
+  list.forEach(l => {
+    const ts = l.createdAt ? new Date(l.createdAt).toLocaleString() : "";
+    ledgerTbody.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td class="code">${l.sku ?? ""}</td>
+        <td class="code">${l.txnType ?? ""}</td>
+        <td>${l.qtyChange ?? ""}</td>
+        <td>${l.note ?? ""}</td>
+        <td>${ts}</td>
+      </tr>
+    `);
+  });
+}
+
+async function loadProducts(){
+  const data = await fetchJson("/products");
+  allProducts = Array.isArray(data) ? data : [];
+  applySearch();
+}
+
+async function loadLedger(){
+  const data = await fetchJson("/ledger");
+  const rows = Array.isArray(data) ? data : [];
+  renderLedger(rows);
+}
+
+function applySearch(){
+  const q = (searchInput.value || "").toLowerCase().trim();
+  const filtered = !q ? allProducts : allProducts.filter(p =>
+    (p.sku || "").toLowerCase().includes(q) ||
+    (p.name || "").toLowerCase().includes(q)
+  );
+  renderProducts(filtered);
+}
+
+async function createProduct(payload){
+  return fetchJson("/products", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+async function updateProduct(sku, payload){
+  return fetchJson(`/products/${encodeURIComponent(sku)}`, {
+    method:"PATCH",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+async function deleteProduct(sku){
+  // Requires backend route DELETE /products/:sku
+  return fetchJson(`/products/${encodeURIComponent(sku)}`, {
+    method:"DELETE",
+  });
+}
+
+openCreateBtn.addEventListener("click", () => openModal("create", null));
+closeModalBtn.addEventListener("click", closeModal);
+modalBackdrop.addEventListener("click", (e) => { if(e.target === modalBackdrop) closeModal(); });
+
+refreshBtn.addEventListener("click", async () => {
+  try{
+    setStatus(true, "Refreshing...");
+    await Promise.all([loadProducts(), loadLedger()]);
+    setStatus(true, "Loaded");
+    showToast("Refreshed");
+  }catch(err){
+    setStatus(false, "Error");
+    showToast(err.message, "err");
+  }
+});
+
+searchInput.addEventListener("input", applySearch);
+
+productsTbody.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button");
+  if(!btn) return;
+  const action = btn.dataset.action;
+  const sku = btn.dataset.sku;
+  const product = allProducts.find(p => p.sku === sku);
+  if(!sku || !action) return;
+
+  if(action === "edit"){
+    openModal("edit", product);
+    return;
+  }
+
+  if(action === "delete"){
+    if(!confirm(`Delete product ${sku}?`)) return;
+    try{
+      setStatus(true, "Deleting...");
+      await deleteProduct(sku);
+      showToast("Product deleted", "warn");
+      await loadProducts();
+      setStatus(true, "Loaded");
+    }catch(err){
+      setStatus(false, "Error");
+      showToast(err.message, "err");
+    }
+  }
+});
+
+productForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  productOut.textContent = "Saving...";
+  setStatus(true, "Working...");
+
+  const payload = {
+    sku: productForm.sku.value.trim(),
+    name: productForm.name.value.trim(),
+    description: productForm.description.value || "",
+    unit: productForm.unit.value.trim() || "pcs",
+    listPrice: productForm.listPrice.value !== "" ? Number(productForm.listPrice.value) : null,
+    salePriceOverride: productForm.salePriceOverride.value !== "" ? Number(productForm.salePriceOverride.value) : null,
+    publishedToShop: !!productForm.publishedToShop.checked,
+    status: productForm.status.value || "ACTIVE",
+    currentQty: productForm.currentQty.value !== "" ? Number(productForm.currentQty.value) : 0,
+  };
+
+  try{
+    if(!editingSku){
+      await createProduct(payload);
+      showToast("Product created successfully");
+    }else{
+      // SKU is immutable on edit
+      delete payload.sku;
+      await updateProduct(editingSku, payload);
+      showToast("Product updated successfully");
+    }
+
+    productOut.textContent = "OK";
+    await loadProducts();
+    closeModal();
+    setStatus(true, "Loaded");
+  }catch(err){
+    productOut.textContent = err.message;
+    showToast(err.message, "err");
+    setStatus(false, "Error");
+  }
+});
+
+deleteBtn.addEventListener("click", async () => {
+  if(!editingSku) return;
+  if(!confirm(`Delete product ${editingSku}?`)) return;
+
+  try{
+    setStatus(true, "Deleting...");
+    await deleteProduct(editingSku);
+    showToast("Product deleted", "warn");
+    await loadProducts();
+    closeModal();
+    setStatus(true, "Loaded");
+  }catch(err){
+    showToast(err.message, "err");
+    setStatus(false, "Error");
+  }
+});
+
+document.getElementById("ledgerForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setStatus(true, "Working...");
+
+  const f = new FormData(e.target);
+  const body = {
+    sku: (f.get("sku") || "").toString().trim(),
+    txnType: (f.get("txnType") || "PUR").toString(),
+    qtyChange: Number(f.get("qtyChange")),
+    refType: (f.get("refType") || "").toString() || undefined,
+    refId: (f.get("refId") || "").toString() || undefined,
+    note: (f.get("note") || "").toString() || undefined,
+  };
+
+  try{
+    await fetchJson("/ledger", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(body),
+    });
+
+    showToast("Ledger record added");
+    e.target.reset();
+    await Promise.all([loadLedger(), loadProducts()]);
+    setStatus(true, "Loaded");
+  }catch(err){
+    showToast(err.message, "err");
+    setStatus(false, "Error");
+  }
+});
+
+(async function init(){
+  try{
+    setStatus(true, "Loading...");
+    await Promise.all([loadProducts(), loadLedger()]);
+    setStatus(true, "Loaded");
+  }catch(err){
+    setStatus(false, "Error");
+    showToast(err.message, "err");
+  }
+})();
+</script>
+</body>
+</html>
